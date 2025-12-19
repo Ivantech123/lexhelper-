@@ -1,0 +1,9 @@
+{
+  "name": "lexhelper",
+  "description": "Интеллектуальный юридический помощник",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "prompt": ""
+}
