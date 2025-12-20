@@ -684,6 +684,17 @@ const ChatInterface: React.FC<Props> = ({ urls, isTgEnvironment = false }) => {
 
         <div className="flex-1 overflow-y-auto pb-24 space-y-6">
            
+           {/* Phone-only notice for non-TG users */}
+           {!isTgEnvironment && (
+             <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3 animate-slide-up delay-50">
+               <AlertTriangle size={20} className="text-amber-500 flex-shrink-0 mt-0.5" />
+               <div>
+                 <p className="text-amber-200 text-sm font-medium">Веб-версия работает только через Telegram</p>
+                 <p className="text-amber-200/60 text-xs mt-1">Откройте бота @Lwayertool_bot на телефоне для полного функционала.</p>
+               </div>
+             </div>
+           )}
+
            {/* Main Action */}
            <div className="animate-slide-up delay-100">
               <button 
