@@ -427,6 +427,7 @@ const ChatInterface: React.FC<Props> = ({ urls, isTgEnvironment = false }) => {
     }
     
     const fullDescription = `Вводные данные:\n${checkboxSummary}\n\nДетали:\n${currentDetails}`;
+    console.log("[ChatInterface] Starting analysis with:", { categoryName, roleName, fullDescriptionLength: fullDescription.length });
 
     try {
       const data = await analyzeLegalCase(
@@ -437,6 +438,8 @@ const ChatInterface: React.FC<Props> = ({ urls, isTgEnvironment = false }) => {
         files
       );
       
+      console.log("[ChatInterface] Analysis result received:", data);
+
       if (isTgEnvironment && tg) {
         tg.MainButton.hideProgress();
         haptic('notification', 'success'); // SUCCESS VIBRATION

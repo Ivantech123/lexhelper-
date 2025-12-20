@@ -91,8 +91,11 @@ if (fs.existsSync(distDir)) {
       // Inject API Key from server environment to client runtime
       const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
       if (apiKey) {
+        console.log(`[Server] Injecting API Key into client (Length: ${apiKey.length})`);
         const script = `<script>window.GEMINI_API_KEY = "${apiKey}";</script>`;
         html = html.replace('</head>', `${script}</head>`);
+      } else {
+        console.warn("[Server] No API Key found in environment variables!");
       }
       
       res.send(html);

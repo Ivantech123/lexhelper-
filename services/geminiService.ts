@@ -107,6 +107,7 @@ export const analyzeLegalCase = async (
   const contents: Content[] = [{ role: "user", parts: contentParts }];
 
   try {
+    console.log(`[GeminiService] Sending request to model: ${MODEL_NAME}`);
     const response: GenerateContentResponse = await currentAi.models.generateContent({
       model: MODEL_NAME,
       contents: contents,
@@ -121,21 +122,51 @@ export const analyzeLegalCase = async (
     });
 
     const text = response.text;
-    if (!text) throw new Error("No response text");
+    console.log(`[GeminiService] Response received. Length: ${text?.length || 0}`);
     
-    return JSON.parse(text) as LegalAnalysisResult;
+    if (!text) {
+        console.error("[GeminiService] Empty response text:", response);
+        throw new Error("No response text");
+    }
+    
+    // Attempt parsing
+    try {
+        const parsed = JSON.parse(text) as LegalAnalysisResult;
+        console.log("[GeminiService] JSON parsed successfully");
+        return parsed;
+    } catch (parseError) {
+        console.error("[GeminiService] JSON Parse Error:", parseError, "Raw Text:", text);
+        throw new Error("Failed to parse AI response");
+    }
 
-  } catch (error) {
-    console.error("Analysis Error:", error);
+  } catch (error: any) {
+    console.error("❌ [GeminiService] Analysis Failed:", error);
+    
+    // Log specifics if available
+    if (error.response) {
+        console.error("Error Response Data:", error.response);
+    }
+    
     return {
-      summary: "Ошибка анализа. Возможно, файл слишком большой или произошла ошибка сети.",
-      reasoningTrace: ["Не удалось завершить анализ."],
+      summary: `⚠️ ОШИБКА АНАЛИЗА: ${error.message || "Неизвестная ошибка"}`,
+      reasoningTrace: [
+        "❌ Analysis Failed",
+        `Error Name: ${error.name}`,
+        `Message: ${error.message}`,
+        `Stack: ${error.stack || 'No stack'}`,
+        error.response ? `Response: ${JSON.stringify(error.response)}` : "No response data"
+      ],
       strengths: [],
-      risks: ["Техническая ошибка"],
+      risks: [
+        "КРИТИЧЕСКАЯ ОШИБКА СИСТЕМЫ",
+        `Код: ${error.code || 'UNKNOWN'}`,
+        `Детали: ${error.toString()}`,
+        "Попробуйте повторить запрос позже."
+      ],
       legalStrengthScore: 0,
       evidenceAssessment: { present: [], missing: [] },
-      deadlines: { status: "Неизвестно", info: "" },
-      strategy: { negotiation: "", court: "" },
+      deadlines: { status: "Ошибка API", info: new Date().toLocaleTimeString() },
+      strategy: { negotiation: "Невозможно построить стратегию из-за ошибки.", court: "Обратитесь к администратору." },
       recommendedDocuments: []
     };
   }
