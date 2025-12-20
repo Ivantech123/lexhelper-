@@ -143,7 +143,20 @@ const App: React.FC = () => {
     // Small delay to ensure script injection
     setTimeout(initTelegram, 100);
 
+    // FAILSAFE: If still loading after 3 seconds, force web mode
+    // Use callback form to check current state value
+    const failsafeTimer = setTimeout(() => {
+      setIsTelegram(prev => {
+        if (prev === null) {
+          addLog("FAILSAFE: Forcing web mode after timeout");
+          return false;
+        }
+        return prev;
+      });
+    }, 3000);
+
     return () => {
+      clearTimeout(failsafeTimer);
       window.removeEventListener('error', handleError);
       window.removeEventListener('unhandledrejection', handleRejection);
       window.removeEventListener('resize', handleResize);
