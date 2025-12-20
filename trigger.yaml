@@ -2,6 +2,8 @@ build:
   steps:
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 'gcr.io/gen-lang-client-0369224243/github.com/ivantech123/lexhelper:$COMMIT_SHA', '-f', 'Dockerfile', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/gen-lang-client-0369224243/github.com/ivantech123/lexhelper:$COMMIT_SHA']
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args: ['run', 'deploy', 'lexhelper', '--image', 'gcr.io/gen-lang-client-0369224243/github.com/ivantech123/lexhelper:$COMMIT_SHA', '--region', 'us-west1']

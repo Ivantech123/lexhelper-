@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initBot } from './telegram.js';
+import { saveHistory, getHistory, deleteHistory } from './db.js';
 
 const PORT = Number(process.env.PORT || 8080);
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -23,6 +24,31 @@ app.disable('x-powered-by');
 
 app.get('/healthz', (_req, res) => {
   res.status(200).send('ok');
+});
+
+// API Routes for History
+app.use('/api', express.json({ limit: '10mb' }));
+
+app.get('/api/history', async (req, res) => {
+  const userId = req.query.userId;
+  if (!userId) return res.status(400).send('userId required');
+  const history = await getHistory(userId);
+  res.json(history);
+});
+
+app.post('/api/history', async (req, res) => {
+  const { userId, item } = req.body;
+  if (!userId || !item) return res.status(400).send('Invalid data');
+  await saveHistory(userId, item);
+  res.sendStatus(200);
+});
+
+app.delete('/api/history/:id', async (req, res) => {
+  const userId = req.query.userId;
+  const historyId = req.params.id;
+  if (!userId) return res.status(400).send('userId required');
+  await deleteHistory(userId, historyId);
+  res.sendStatus(200);
 });
 
 app.post(

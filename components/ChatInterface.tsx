@@ -218,18 +218,30 @@ const ChatInterface: React.FC<Props> = ({ urls, isTgEnvironment = false }) => {
 
   // Load History on Mount
   useEffect(() => {
-    const saved = localStorage.getItem(`lex_history_${userId}`);
-    if (saved) {
+    const fetchHistory = async () => {
       try {
-        setHistory(JSON.parse(saved));
+        // Try to fetch from API
+        const res = await fetch(`/api/history?userId=${userId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setHistory(data);
+        } else {
+            // Fallback to local storage if API fails or offline
+            const saved = localStorage.getItem(`lex_history_${userId}`);
+            if (saved) setHistory(JSON.parse(saved));
+        }
       } catch (e) {
         console.error("Failed to load history", e);
+        const saved = localStorage.getItem(`lex_history_${userId}`);
+        if (saved) setHistory(JSON.parse(saved));
       }
-    }
+    };
+
+    if (userId) fetchHistory();
   }, [userId]);
 
   // Save History Helper
-  const saveToHistory = (res: LegalAnalysisResult, cat: string, role: string) => {
+  const saveToHistory = async (res: LegalAnalysisResult, cat: string, role: string) => {
     const newItem: HistoryItem = {
       id: Date.now().toString(),
       date: Date.now(),
@@ -242,15 +254,30 @@ const ChatInterface: React.FC<Props> = ({ urls, isTgEnvironment = false }) => {
     
     const newHistory = [newItem, ...history];
     setHistory(newHistory);
-    localStorage.setItem(`lex_history_${userId}`, JSON.stringify(newHistory));
+    
+    // Save to DB
+    try {
+      await fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, item: newItem })
+      });
+    } catch (e) {
+      console.error('Error saving to DB', e);
+    }
   };
 
-  const deleteHistoryItem = (id: string, e: React.MouseEvent) => {
+  const deleteHistoryItem = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     haptic('impact', 'medium');
     const newHistory = history.filter(h => h.id !== id);
     setHistory(newHistory);
-    localStorage.setItem(`lex_history_${userId}`, JSON.stringify(newHistory));
+    
+    try {
+      await fetch(`/api/history/${id}?userId=${userId}`, { method: 'DELETE' });
+    } catch (e) {
+      console.error('Error deleting from DB', e);
+    }
   };
 
   const loadFromHistory = (item: HistoryItem) => {

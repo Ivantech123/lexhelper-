@@ -53,3 +53,34 @@ export const getUser = async (userId) => {
     return null;
   }
 };
+
+export const saveHistory = async (userId, historyItem) => {
+  try {
+    const docRef = db.collection('users').doc(String(userId)).collection('history').doc(historyItem.id);
+    await docRef.set(historyItem);
+    return true;
+  } catch (error) {
+    console.error('Error saving history:', error);
+    return false;
+  }
+};
+
+export const getHistory = async (userId) => {
+  try {
+    const snapshot = await db.collection('users').doc(String(userId)).collection('history').orderBy('date', 'desc').get();
+    return snapshot.docs.map(doc => doc.data());
+  } catch (error) {
+    console.error('Error getting history:', error);
+    return [];
+  }
+};
+
+export const deleteHistory = async (userId, historyId) => {
+  try {
+    await db.collection('users').doc(String(userId)).collection('history').doc(historyId).delete();
+    return true;
+  } catch (error) {
+    console.error('Error deleting history:', error);
+    return false;
+  }
+};
