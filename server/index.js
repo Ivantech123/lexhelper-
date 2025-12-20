@@ -102,8 +102,20 @@ app.get('/debug/info', (req, res) => {
 // API Proxy for Gemini (handles Service Worker requests)
 app.use('/api-proxy', express.json({ limit: '10mb' }), async (req, res) => {
   try {
-    const targetUrl = `https://generativelanguage.googleapis.com${req.url}`;
-    console.log(`[Proxy] Forwarding ${req.method} request to: ${targetUrl}`);
+    // Priority: Env Var > Hardcoded Fallback (User provided)
+    const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || 'AIzaSyDmI8WcphbBXLikmVAlwtGBuOWViy0Ry9U';
+    
+    if (!apiKey) {
+       console.error('[Proxy] No GEMINI_API_KEY found!');
+    }
+
+    // Construct URL and force inject the API Key from server env
+    const targetUrl = new URL(`https://generativelanguage.googleapis.com${req.url}`);
+    if (apiKey) {
+      targetUrl.searchParams.set('key', apiKey);
+    }
+
+    console.log(`[Proxy] Forwarding ${req.method} request to: ${targetUrl.origin}${targetUrl.pathname} (key injected: ${!!apiKey})`);
 
     const options = {
       method: req.method,
@@ -116,7 +128,7 @@ app.use('/api-proxy', express.json({ limit: '10mb' }), async (req, res) => {
       options.body = JSON.stringify(req.body);
     }
 
-    const response = await fetch(targetUrl, options);
+    const response = await fetch(targetUrl.toString(), options);
     
     // Forward the status code
     res.status(response.status);
@@ -146,7 +158,7 @@ if (fs.existsSync(distDir)) {
       console.log('[Server] Serving index.html. Preview:', html.substring(0, 200));
       
       // Inject API Key from server environment to client runtime
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
+      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || 'AIzaSyDmI8WcphbBXLikmVAlwtGBuOWViy0Ry9U';
       if (apiKey) {
         console.log(`[Server] Injecting API Key into client (Length: ${apiKey.length})`);
         const script = `<script>window.GEMINI_API_KEY = "${apiKey}";</script>`;
