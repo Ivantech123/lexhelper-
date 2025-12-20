@@ -144,7 +144,18 @@ app.use('/api-proxy', express.json({ limit: '10mb' }), async (req, res) => {
 
 if (fs.existsSync(distDir)) {
   console.log('[Server] Dist directory exists. Contents:', fs.readdirSync(distDir));
+  
+  // Serve static files
   app.use(express.static(distDir, { index: false }));
+
+  // Prevent index.html fallback for missing assets (strict 404)
+  app.use((req, res, next) => {
+    if (/(.ico|.js|.css|.jpg|.png|.map|.woff|.woff2|.ttf)$/i.test(req.path)) {
+        console.warn(`[Server] 404 for asset: ${req.path}`);
+        return res.status(404).send('Asset not found');
+    }
+    next();
+  });
 
   app.get('*', async (_req, res) => {
     try {
