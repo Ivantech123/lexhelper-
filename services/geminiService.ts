@@ -7,7 +7,7 @@
 import { GoogleGenAI, GenerateContentResponse, Tool, HarmCategory, HarmBlockThreshold, Content, Part } from "@google/genai";
 import { LegalAnalysisResult, UploadedFile } from '../types';
 
-const API_KEY = process.env.API_KEY;
+const API_KEY = process.env.API_KEY || (typeof window !== 'undefined' ? (window as any).GEMINI_API_KEY : undefined);
 let ai: GoogleGenAI;
 
 // Using the most capable model

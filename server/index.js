@@ -83,8 +83,23 @@ const distDir = path.resolve(__dirname, '..', 'dist');
 if (fs.existsSync(distDir)) {
   app.use(express.static(distDir, { index: false }));
 
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(distDir, 'index.html'));
+  app.get('*', async (_req, res) => {
+    try {
+      const indexPath = path.join(distDir, 'index.html');
+      let html = await fs.promises.readFile(indexPath, 'utf-8');
+      
+      // Inject API Key from server environment to client runtime
+      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
+      if (apiKey) {
+        const script = `<script>window.GEMINI_API_KEY = "${apiKey}";</script>`;
+        html = html.replace('</head>', `${script}</head>`);
+      }
+      
+      res.send(html);
+    } catch (err) {
+      console.error('Error serving index.html:', err);
+      res.status(500).send('Internal Server Error');
+    }
   });
 }
 
