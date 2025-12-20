@@ -106,42 +106,33 @@ const App: React.FC = () => {
         tg.ready();
         addLog("Called tg.ready()");
         
-        // Robust check: initData string OR initDataUnsafe object with user
-        if (tg.initData || tg.initDataUnsafe?.user) {
-          addLog("Valid initData or User found. App running in Telegram.");
-          setIsTelegram(true);
-          
-          try {
-            tg.expand();
-            addLog("Called tg.expand()");
-          } catch (e) {
-            addLog(`Expand error: ${e}`);
-          }
-          
-          try {
-             tg.setHeaderColor('#09090b');
-          } catch (e) {
-             // ignore color error
-          }
-          
-          // Dynamic height fix
-          const syncHeight = () => {
-            if (tg.viewportStableHeight) {
-              setAppHeight(`${tg.viewportStableHeight}px`);
-            }
-          };
-          
-          syncHeight();
-          tg.onEvent('viewportChanged', syncHeight);
-          
-          return () => {
-             tg.offEvent('viewportChanged', syncHeight);
-             window.removeEventListener('resize', handleResize);
-          };
-        } else {
-          addLog("No initData. App running in Browser/Desktop Mode.");
-          setIsTelegram(false); 
+        // FIXED: If we have a valid TG platform, treat as Telegram environment
+        // regardless of initData (Telegram Desktop often has empty initData)
+        addLog(`initData length: ${tg.initData?.length || 0}, user: ${tg.initDataUnsafe?.user?.id || 'none'}`);
+        setIsTelegram(true);
+        
+        try {
+          tg.expand();
+          addLog("Called tg.expand()");
+        } catch (e) {
+          addLog(`Expand error: ${e}`);
         }
+        
+        try {
+           tg.setHeaderColor('#09090b');
+        } catch (e) {
+           // ignore color error
+        }
+        
+        // Dynamic height fix
+        const syncHeight = () => {
+          if (tg.viewportStableHeight) {
+            setAppHeight(`${tg.viewportStableHeight}px`);
+          }
+        };
+        
+        syncHeight();
+        tg.onEvent('viewportChanged', syncHeight);
 
       } catch (e: any) {
         addLog(`Init Exception: ${e.toString()}`);
