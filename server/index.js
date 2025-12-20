@@ -79,14 +79,40 @@ app.post(
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const distDir = path.resolve(__dirname, '..', 'dist');
+console.log('[Server] Dist Directory:', distDir);
+
+// Debug route to inspect server environment
+app.get('/debug/info', (req, res) => {
+  try {
+    const info = {
+      env: process.env.NODE_ENV,
+      cwd: process.cwd(),
+      dirname: __dirname,
+      distDir: distDir,
+      distExists: fs.existsSync(distDir),
+      distContents: fs.existsSync(distDir) ? fs.readdirSync(distDir) : null,
+      rootContents: fs.readdirSync(process.cwd()),
+    };
+    res.json(info);
+  } catch (err) {
+    res.status(500).json({ error: err.toString() });
+  }
+});
 
 if (fs.existsSync(distDir)) {
+  console.log('[Server] Dist directory exists. Contents:', fs.readdirSync(distDir));
   app.use(express.static(distDir, { index: false }));
 
   app.get('*', async (_req, res) => {
     try {
       const indexPath = path.join(distDir, 'index.html');
+      if (!fs.existsSync(indexPath)) {
+        console.error('[Server] index.html not found in dist folder');
+        return res.status(404).send('index.html not found');
+      }
+      
       let html = await fs.promises.readFile(indexPath, 'utf-8');
+      console.log('[Server] Serving index.html. Preview:', html.substring(0, 200));
       
       // Inject API Key from server environment to client runtime
       const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';

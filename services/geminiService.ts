@@ -71,12 +71,15 @@ const ANALYST_SYSTEM_INSTRUCTION = `Вы — LexHelper, интеллектуал
 }`;
 
 export const analyzeLegalCase = async (
+  userId: string | number,
   category: string,
   role: string,
   details: string,
   urls: string[],
   files: UploadedFile[] = []
 ): Promise<LegalAnalysisResult> => {
+  console.log(`[GeminiService] Starting Analysis for ${category}/${role} (User: ${userId})`);
+  
   const currentAi = getAiInstance();
   
   // Construct parts with text and optional files
@@ -142,31 +145,31 @@ export const analyzeLegalCase = async (
   } catch (error: any) {
     console.error("❌ [GeminiService] Analysis Failed:", error);
     
-    // Log specifics if available
     if (error.response) {
         console.error("Error Response Data:", error.response);
     }
-    
+
+    // ALWAYS Return Detailed Debug Info for troubleshooting
     return {
-      summary: `⚠️ ОШИБКА АНАЛИЗА: ${error.message || "Неизвестная ошибка"}`,
+      summary: `⚠️ ОШИБКА: ${error.message || "Неизвестная ошибка"}`,
       reasoningTrace: [
-        "❌ Analysis Failed",
+        "❌ Сбой анализа",
         `Error Name: ${error.name}`,
-        `Message: ${error.message}`,
         `Stack: ${error.stack || 'No stack'}`,
-        error.response ? `Response: ${JSON.stringify(error.response)}` : "No response data"
+        error.response ? `Response: ${JSON.stringify(error.response)}` : "No response data",
+        `User ID: ${userId}`
       ],
       strengths: [],
       risks: [
-        "КРИТИЧЕСКАЯ ОШИБКА СИСТЕМЫ",
+        "ТЕХНИЧЕСКИЕ ДЕТАЛИ:",
         `Код: ${error.code || 'UNKNOWN'}`,
-        `Детали: ${error.toString()}`,
-        "Попробуйте повторить запрос позже."
+        `Сообщение: ${error.toString()}`,
+        "Пожалуйста, отправьте скриншот разработчику."
       ],
       legalStrengthScore: 0,
       evidenceAssessment: { present: [], missing: [] },
-      deadlines: { status: "Ошибка API", info: new Date().toLocaleTimeString() },
-      strategy: { negotiation: "Невозможно построить стратегию из-за ошибки.", court: "Обратитесь к администратору." },
+      deadlines: { status: "Сбой", info: new Date().toLocaleTimeString() },
+      strategy: { negotiation: "Ошибка", court: "Ошибка" },
       recommendedDocuments: []
     };
   }

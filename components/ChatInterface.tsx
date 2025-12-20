@@ -431,6 +431,7 @@ const ChatInterface: React.FC<Props> = ({ urls, isTgEnvironment = false }) => {
 
     try {
       const data = await analyzeLegalCase(
+        userId,
         categoryName, 
         roleName,
         fullDescription, 
