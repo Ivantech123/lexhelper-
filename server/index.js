@@ -99,6 +99,37 @@ app.get('/debug/info', (req, res) => {
   }
 });
 
+// API Proxy for Gemini (handles Service Worker requests)
+app.use('/api-proxy', express.json({ limit: '10mb' }), async (req, res) => {
+  try {
+    const targetUrl = `https://generativelanguage.googleapis.com${req.url}`;
+    console.log(`[Proxy] Forwarding ${req.method} request to: ${targetUrl}`);
+
+    const options = {
+      method: req.method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    };
+
+    if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+      options.body = JSON.stringify(req.body);
+    }
+
+    const response = await fetch(targetUrl, options);
+    
+    // Forward the status code
+    res.status(response.status);
+
+    // Forward the response body
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('[Proxy] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 if (fs.existsSync(distDir)) {
   console.log('[Server] Dist directory exists. Contents:', fs.readdirSync(distDir));
   app.use(express.static(distDir, { index: false }));
