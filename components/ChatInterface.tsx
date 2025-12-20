@@ -572,7 +572,7 @@ const ChatInterface: React.FC<Props> = ({ urls, isTgEnvironment = false }) => {
            </div>
            <div>
               <div className="text-zinc-400 text-[10px] md:text-xs font-bold uppercase tracking-wider mb-1">
-                 {isTgEnvironment ? 'ID: ' + userId : 'Гость'}
+                 {isTgEnvironment ? `TG (${tg?.platform || '?'}) ID: ${userId}` : 'Browser Mode (Guest)'}
               </div>
               <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">
                  {username}

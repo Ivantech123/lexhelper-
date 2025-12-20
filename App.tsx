@@ -103,8 +103,9 @@ const App: React.FC = () => {
         tg.ready();
         addLog("Called tg.ready()");
         
-        if (tg.initData) {
-          addLog("Valid initData found. App running in Telegram.");
+        // Robust check: initData string OR initDataUnsafe object with user
+        if (tg.initData || tg.initDataUnsafe?.user) {
+          addLog("Valid initData or User found. App running in Telegram.");
           setIsTelegram(true);
           
           try {
