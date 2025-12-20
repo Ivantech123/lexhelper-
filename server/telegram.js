@@ -1,4 +1,5 @@
 import { Telegraf, Markup } from 'telegraf';
+import { saveUser } from './db.js';
 
 export const initBot = ({ token, webAppUrl }) => {
   const bot = new Telegraf(token);
@@ -10,10 +11,14 @@ export const initBot = ({ token, webAppUrl }) => {
 
   bot.start(async (ctx) => {
     const url = getWebAppUrl();
+    await saveUser(ctx);
 
     await ctx.reply(
-      'Открой LexHelper:',
-      Markup.keyboard([[Markup.button.webApp('Открыть LexHelper', url)]])
+      `👋 Привет, ${ctx.from.first_name}!\n\n` +
+      `Я — **LexHelper**, твой умный юридический помощник.\n` +
+      `Я помогу проанализировать ситуацию, составить документы и найти ответы на правовые вопросы.\n\n` +
+      `Нажми кнопку ниже, чтобы начать! 🚀`,
+      Markup.keyboard([[Markup.button.webApp('⚖️ Открыть LexHelper', url)]])
         .resize()
         .persistent()
     );
@@ -21,10 +26,11 @@ export const initBot = ({ token, webAppUrl }) => {
 
   bot.command('app', async (ctx) => {
     const url = getWebAppUrl();
+    await saveUser(ctx);
 
     await ctx.reply(
-      'LexHelper:',
-      Markup.inlineKeyboard([[Markup.button.webApp('Открыть', url)]])
+      'Нажми кнопку, чтобы открыть приложение:',
+      Markup.inlineKeyboard([[Markup.button.webApp('📱 Открыть', url)]])
     );
   });
 

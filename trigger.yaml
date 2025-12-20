@@ -1,0 +1,24 @@
+build:
+  steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/gen-lang-client-0369224243/github.com/ivantech123/lexhelper:$COMMIT_SHA', '-f', 'Dockerfile', '.']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args: ['run', 'deploy', 'lexhelper', '--image', 'gcr.io/gen-lang-client-0369224243/github.com/ivantech123/lexhelper:$COMMIT_SHA', '--region', 'us-west1']
+  images:
+  - 'gcr.io/gen-lang-client-0369224243/github.com/ivantech123/lexhelper:$COMMIT_SHA'
+  logsBucket: 'gs://gen-lang-client-0369224243-cloudbuild-logs-1766184509'
+  options:
+    logging: GCS_ONLY
+serviceAccount: 'projects/gen-lang-client-0369224243/serviceAccounts/150174500994-compute@developer.gserviceaccount.com'
+name: 'rmgpgab-lexhelper-us-west1-Ivantech123-lexhelper---matsh'
+description: 'Build and deploy to Cloud Run service lexhelper on push to "^main$"'
+github:
+  owner: 'Ivantech123'
+  name: 'lexhelper-'
+  push:
+    branch: '^main$'
+tags:
+- 'gcp-cloud-build-deploy-cloud-run'
+- 'gcp-cloud-build-deploy-cloud-run-managed'
+- 'lexhelper'
