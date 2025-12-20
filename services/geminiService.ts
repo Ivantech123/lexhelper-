@@ -11,7 +11,7 @@ const API_KEY = process.env.API_KEY || (typeof window !== 'undefined' ? (window 
 let ai: GoogleGenAI;
 
 // Using the most capable model
-const MODEL_NAME = "gemini-3-pro-preview"; 
+const MODEL_NAME = "gemini-2.0-flash-exp"; 
 
 const getAiInstance = (): GoogleGenAI => {
   if (!API_KEY) {
@@ -119,8 +119,6 @@ export const analyzeLegalCase = async (
         safetySettings: safetySettings,
         systemInstruction: ANALYST_SYSTEM_INSTRUCTION,
         responseMimeType: "application/json",
-        // Enable Thinking for deeper analysis (Gemini 3 Feature)
-        thinkingConfig: { thinkingBudget: 4096 }, 
       },
     });
 
@@ -178,6 +176,44 @@ export const analyzeLegalCase = async (
 const DOC_GENERATOR_SYSTEM_INSTRUCTION = `Вы — генератор юридических документов РФ.
 Составь документ на основе данных. Используй плейсхолдеры [Данные]. Официальный стиль.
 `;
+
+export type AssistantChatMessage = { role: 'user' | 'assistant'; text: string };
+
+const ASSISTANT_SYSTEM_INSTRUCTION = `Ты — LexHelper, диалоговый ассистент.
+Твоя задача — в режиме диалога собрать недостающие факты по делу пользователя и помочь сформулировать качественное описание для дальнейшего анализа.
+
+Правила:
+1) Пиши по-русски.
+2) Коротко и по делу.
+3) Задавай максимум 1-2 уточняющих вопроса за сообщение.
+4) Если данных достаточно, предложи кратко сформулированный итог для вставки в «Детали».`;
+
+export const assistantChatReply = async (
+  category: string,
+  role: string,
+  messages: AssistantChatMessage[]
+): Promise<string> => {
+  const currentAi = getAiInstance();
+
+  const context: Content[] = [
+    { role: 'user', parts: [{ text: `КАТЕГОРИЯ: ${category}\nРОЛЬ: ${role}` }] },
+    ...messages.map((m): Content => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.text }]
+    }))
+  ];
+
+  const response: GenerateContentResponse = await currentAi.models.generateContent({
+    model: MODEL_NAME,
+    contents: context,
+    config: {
+      safetySettings: safetySettings,
+      systemInstruction: ASSISTANT_SYSTEM_INSTRUCTION,
+    }
+  });
+
+  return response.text || '';
+};
 
 export const generateLegalDocument = async (
   docName: string,

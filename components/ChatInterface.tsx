@@ -6,14 +6,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { LegalAnalysisResult, CategoryDef, UploadedFile, HistoryItem } from '../types';
-import { analyzeLegalCase, generateLegalDocument } from '../services/geminiService';
+import { analyzeLegalCase, generateLegalDocument, assistantChatReply, type AssistantChatMessage } from '../services/geminiService';
 import { 
   Briefcase, AlertTriangle, CheckCircle, 
   ArrowRight, Shield, Home, Car, Users, Scale, 
   ChevronRight, Loader2, ArrowLeft,
   ShoppingBag, Gavel, Scroll, Percent,
   FileText, Clock, TrendingUp, AlertCircle, FileCheck, HelpCircle, X, Copy,
-  PlusCircle, BrainCircuit, Lock, Camera, History, User as UserIcon, Calendar, Trash2
+  PlusCircle, BrainCircuit, Lock, Camera, History, User as UserIcon, Calendar, Trash2, Volume2, VolumeX, Send
 } from 'lucide-react';
 
 interface Props {
@@ -185,6 +185,16 @@ const ChatInterface: React.FC<Props> = ({ urls, isTgEnvironment = false }) => {
   const [detailsText, setDetailsText] = useState('');
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [intakeInputMode, setIntakeInputMode] = useState<'TEXT' | 'VOICE'>('TEXT');
+  const [assistantMessages, setAssistantMessages] = useState<AssistantChatMessage[]>([]);
+  const [assistantInput, setAssistantInput] = useState('');
+  const [assistantStatus, setAssistantStatus] = useState<'idle' | 'thinking' | 'error'>('idle');
+  const [assistantError, setAssistantError] = useState<string | null>(null);
+  const [ttsEnabled, setTtsEnabled] = useState(true);
+  const [ttsStatus, setTtsStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [ttsError, setTtsError] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   
   // Clarification State
   const [clarificationInput, setClarificationInput] = useState('');
@@ -213,6 +223,67 @@ const ChatInterface: React.FC<Props> = ({ urls, isTgEnvironment = false }) => {
   const userId = user?.id || 'guest';
   const username = user?.first_name || 'Guest';
   const userPhoto = user?.photo_url;
+
+  const playTts = async (text: string) => {
+    if (!ttsEnabled) return;
+    if (!text.trim()) return;
+    setTtsError(null);
+    setTtsStatus('loading');
+    try {
+      const resp = await fetch('/api/tts/speak', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, languageCode: 'ru-RU' })
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(json?.error || `TTS error (${resp.status})`);
+      const base64 = String(json?.audioBase64 || '');
+      if (!base64) throw new Error('Empty TTS audio');
+      const audio = audioRef.current || new Audio();
+      audioRef.current = audio;
+      audio.pause();
+      audio.currentTime = 0;
+      audio.src = `data:${json?.mimeType || 'audio/mpeg'};base64,${base64}`;
+      await audio.play();
+      setTtsStatus('idle');
+    } catch (e: any) {
+      setTtsStatus('error');
+      setTtsError(e?.message || String(e));
+    }
+  };
+
+  const handleAssistantSend = async () => {
+    if (!assistantInput.trim()) return;
+    if (!categoryName || !roleName) return;
+    const userMsg: AssistantChatMessage = { role: 'user', text: assistantInput.trim() };
+    setAssistantInput('');
+    setAssistantError(null);
+    setAssistantStatus('thinking');
+    const nextMessages = [...assistantMessages, userMsg];
+    setAssistantMessages(nextMessages);
+    try {
+      const reply = await assistantChatReply(categoryName, roleName, nextMessages);
+      const assistantMsg: AssistantChatMessage = { role: 'assistant', text: reply || '' };
+      const finalMessages = [...nextMessages, assistantMsg];
+      setAssistantMessages(finalMessages);
+      setAssistantStatus('idle');
+      if (ttsEnabled && reply) {
+        await playTts(reply);
+      }
+    } catch (e: any) {
+      setAssistantStatus('error');
+      setAssistantError(e?.message || String(e));
+    }
+  };
+
+  const applyAssistantToDetails = () => {
+    const last = [...assistantMessages].reverse().find(m => m.role === 'assistant' && m.text.trim());
+    if (!last) return;
+    haptic('impact', 'medium');
+    const next = (detailsText ? detailsText + '\n\n' : '') + last.text.trim();
+    setDetailsText(next);
+    setIntakeInputMode('TEXT');
+  };
 
   // ---------------- Navigation & Effects ----------------
 
@@ -323,7 +394,6 @@ const ChatInterface: React.FC<Props> = ({ urls, isTgEnvironment = false }) => {
     if (!isTgEnvironment || !tg) return;
 
     const handleMainBtn = () => {
-       haptic('impact', 'heavy');
        handleAnalyzeClick();
     };
 
@@ -341,6 +411,23 @@ const ChatInterface: React.FC<Props> = ({ urls, isTgEnvironment = false }) => {
       tg.MainButton.offClick(handleMainBtn);
     };
   }, [step, detailsText, isTgEnvironment]);
+
+  useEffect(() => {
+    if (step !== 'INTAKE') {
+      try {
+        if (audioRef.current) {
+          audioRef.current.pause();
+        }
+      } catch (e) {
+      }
+    }
+  }, [step]);
+
+  useEffect(() => {
+    if (step === 'INTAKE' && intakeInputMode === 'VOICE') {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [assistantMessages, intakeInputMode, step]);
 
   // ---------------- Handlers & Haptics ----------------
 
@@ -399,6 +486,11 @@ const ChatInterface: React.FC<Props> = ({ urls, isTgEnvironment = false }) => {
   const toggleAnswer = (qId: string) => {
     haptic('selection'); // Perfect for checkboxes
     setAnswers(prev => ({ ...prev, [qId]: !prev[qId] }));
+  };
+
+  const handleAnalyzeClick = () => {
+    haptic('impact', 'heavy');
+    runAnalysis(detailsText);
   };
 
   const runAnalysis = async (currentDetails: string) => {
@@ -463,10 +555,6 @@ const ChatInterface: React.FC<Props> = ({ urls, isTgEnvironment = false }) => {
       }
       setStep('INTAKE'); 
     }
-  };
-
-  const handleAnalyzeClick = () => {
-    runAnalysis(detailsText);
   };
 
   const handleClarificationSubmit = () => {
@@ -546,7 +634,7 @@ const ChatInterface: React.FC<Props> = ({ urls, isTgEnvironment = false }) => {
                            <Lock className="text-emerald-500" />
                            <h3 className="text-xl font-bold text-white">Политика</h3>
                         </div>
-                        <button onClick={() => setShowPrivacy(false)} className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors">
+                        <button onClick={() => { haptic('impact', 'light'); setShowPrivacy(false); }} className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors">
                            <X size={24} />
                         </button>
                     </div>
@@ -557,7 +645,7 @@ const ChatInterface: React.FC<Props> = ({ urls, isTgEnvironment = false }) => {
                         Результаты работы ИИ не являются юридической консультацией.</p>
                     </div>
                     <div className="p-6 border-t border-zinc-800 bg-[#18181b] rounded-b-2xl">
-                        <button onClick={() => setShowPrivacy(false)} className="w-full btn-primary py-3 rounded-xl font-bold">
+                        <button onClick={() => { haptic('impact', 'light'); setShowPrivacy(false); }} className="w-full btn-primary py-3 rounded-xl font-bold">
                             Закрыть
                         </button>
                     </div>
@@ -881,17 +969,118 @@ const ChatInterface: React.FC<Props> = ({ urls, isTgEnvironment = false }) => {
                      />
                    </div>
 
-                   <textarea 
-                     className="w-full bg-[#18181b] border border-zinc-800 rounded-2xl p-5 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-zinc-700 min-h-[150px] resize-none transition-all"
-                     placeholder="Опишите хронологию событий..."
-                     value={detailsText}
-                     onChange={(e) => setDetailsText(e.target.value)}
-                   />
-                   <p className="text-xs text-zinc-500 flex items-center gap-2">
-                     <FileText size={12} /> Анализ документов производится автоматически с помощью Vision API.
-                   </p>
-                 </div>
+                   <div className="flex items-center gap-2 bg-zinc-900/50 border border-zinc-800 rounded-xl p-1">
+                     <button
+                       onClick={() => { haptic('selection'); setIntakeInputMode('TEXT'); }}
+                       className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${intakeInputMode === 'TEXT' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-white'}`}
+                     >
+                       Текст
+                     </button>
+                     <button
+                       onClick={() => { haptic('selection'); setIntakeInputMode('VOICE'); }}
+                       className={`flex-1 py-2 rounded-lg font-bold text-sm transition-colors ${intakeInputMode === 'VOICE' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-white'}`}
+                     >
+                       Поговорить
+                     </button>
+                   </div>
+
+                   {intakeInputMode === 'TEXT' ? (
+                     <textarea 
+                       className="w-full bg-[#18181b] border border-zinc-800 rounded-2xl p-5 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-zinc-700 min-h-[150px] resize-none transition-all"
+                       placeholder="Опишите хронологию событий..."
+                       value={detailsText}
+                       onChange={(e) => setDetailsText(e.target.value)}
+                     />
+                   ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <button
+                          onClick={() => { haptic('selection'); setTtsEnabled(v => !v); }}
+                          className={`px-4 py-3 rounded-xl font-bold flex items-center gap-2 border transition-colors ${ttsEnabled ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-zinc-800 bg-zinc-900/50 text-zinc-400'}`}
+                        >
+                          {ttsEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+                          Озвучивать
+                        </button>
+                        <button
+                          onClick={applyAssistantToDetails}
+                          disabled={!assistantMessages.some(m => m.role === 'assistant' && m.text.trim())}
+                          className="flex-1 btn-primary py-3 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Вставить в детали
+                        </button>
+                      </div>
+
+                      {(assistantError || ttsError) && (
+                        <div className="p-4 rounded-xl border border-rose-900/40 bg-rose-950/30 text-rose-200 text-sm break-words">
+                          {assistantError || ttsError}
+                        </div>
+                      )}
+
+                      <div className="bg-[#18181b] border border-zinc-800 rounded-2xl p-4 h-[320px] overflow-y-auto space-y-4 scroll-smooth">
+                        {assistantMessages.length === 0 ? (
+                          <div className="h-full flex flex-col items-center justify-center text-center opacity-50">
+                             <div className="w-12 h-12 bg-zinc-800 rounded-2xl flex items-center justify-center mb-3">
+                                <BrainCircuit className="text-emerald-500" size={24} />
+                             </div>
+                             <p className="text-sm text-zinc-400">
+                               Привет! Я помогу описать ситуацию.<br/>Расскажи, что случилось?
+                             </p>
+                          </div>
+                        ) : (
+                          assistantMessages.map((m, idx) => (
+                            <div key={idx} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
+                              <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap shadow-sm ${m.role === 'user' ? 'bg-emerald-600 text-white rounded-tr-sm' : 'bg-zinc-800 text-zinc-100 rounded-tl-sm'}`}>
+                                {m.text}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                        {assistantStatus === 'thinking' && (
+                          <div className="flex justify-start animate-slide-up">
+                            <div className="bg-zinc-800 text-zinc-400 rounded-2xl rounded-tl-sm px-4 py-3 text-sm flex items-center gap-2">
+                              <Loader2 size={16} className="animate-spin text-emerald-500" />
+                              Думаю...
+                            </div>
+                          </div>
+                        )}
+                        <div ref={messagesEndRef} />
+                      </div>
+
+                      <div className="flex gap-2 items-end">
+                        <textarea
+                          className="flex-1 bg-[#18181b] border border-zinc-800 rounded-2xl p-4 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-zinc-700 min-h-[56px] max-h-[120px] resize-none transition-all"
+                          placeholder="Напиши сюда..."
+                          value={assistantInput}
+                          onChange={(e) => setAssistantInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleAssistantSend();
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={handleAssistantSend}
+                          disabled={!assistantInput.trim() || assistantStatus === 'thinking'}
+                          className="btn-primary px-4 py-4 rounded-2xl font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                        >
+                          <Send size={18} />
+                        </button>
+                      </div>
+
+                      {ttsStatus === 'loading' && (
+                        <div className="text-xs text-zinc-500">
+                          Озвучиваю...
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <p className="text-xs text-zinc-500 flex items-center gap-2">
+                    <FileText size={12} /> Анализ документов производится автоматически с помощью Vision API.
+                  </p>
+                </div>
                  
+
                  {/* Explicit Button for Desktop/Browser or Fallback */}
                  {(!isTgEnvironment || !tg) && (
                     <button 
@@ -1033,7 +1222,7 @@ const ChatInterface: React.FC<Props> = ({ urls, isTgEnvironment = false }) => {
                       <FileText className="text-emerald-500" />
                       <h3 className="text-xl font-bold text-white">{generatedDoc.title}</h3>
                    </div>
-                   <button onClick={() => setGeneratedDoc(null)} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
+                   <button onClick={() => { haptic('impact', 'light'); setGeneratedDoc(null); }} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
                       <X size={24} className="text-zinc-400 hover:text-white" />
                    </button>
                 </div>

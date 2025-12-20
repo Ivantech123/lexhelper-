@@ -4,6 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { initBot } from './telegram.js';
 import { saveHistory, getHistory, deleteHistory } from './db.js';
+import * as speech from '@google-cloud/speech';
+import * as textToSpeech from '@google-cloud/text-to-speech';
 
 const PORT = Number(process.env.PORT || 8080);
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -21,6 +23,9 @@ const bot = BOT_TOKEN
 
 const app = express();
 app.disable('x-powered-by');
+
+const { SpeechClient } = speech.v2;
+const TextToSpeechClient = textToSpeech.TextToSpeechClient || textToSpeech.v1?.TextToSpeechClient;
 
 app.get('/healthz', (_req, res) => {
   res.status(200).send('ok');
@@ -49,6 +54,91 @@ app.delete('/api/history/:id', async (req, res) => {
   if (!userId) return res.status(400).send('userId required');
   await deleteHistory(userId, historyId);
   res.sendStatus(200);
+});
+
+app.post('/api/speech/transcribe', express.json({ limit: '25mb' }), async (req, res) => {
+  try {
+    const { audioBase64, mimeType, languageCode } = req.body || {};
+
+    if (!audioBase64 || typeof audioBase64 !== 'string') {
+      return res.status(400).json({ error: 'audioBase64 required' });
+    }
+
+    const sttLocation = process.env.STT_LOCATION || 'us';
+    const projectId = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT;
+    if (!projectId) {
+      return res.status(500).json({ error: 'GOOGLE_CLOUD_PROJECT is not set' });
+    }
+
+    const apiEndpoint = process.env.STT_API_ENDPOINT;
+    const client = apiEndpoint ? new SpeechClient({ apiEndpoint }) : new SpeechClient();
+
+    const audioBytes = Buffer.from(audioBase64, 'base64');
+    const lang = languageCode || 'ru-RU';
+
+    const request = {
+      recognizer: `projects/${projectId}/locations/${sttLocation}/recognizers/_`,
+      config: {
+        autoDecodingConfig: {},
+        languageCodes: [lang],
+        model: 'chirp_3',
+      },
+      content: audioBytes,
+    };
+
+    const [response] = await client.recognize(request);
+
+    const results = response?.results || [];
+    const transcript = results
+      .map(r => (r.alternatives && r.alternatives[0] ? r.alternatives[0].transcript : ''))
+      .filter(Boolean)
+      .join('\n');
+
+    return res.json({ transcript, mimeType: mimeType || null, languageCode: lang });
+  } catch (error) {
+    console.error('[STT] Transcribe error:', error);
+    return res.status(500).json({ error: error?.message || String(error) });
+  }
+});
+
+app.post('/api/tts/speak', express.json({ limit: '1mb' }), async (req, res) => {
+  try {
+    const { text, languageCode, voiceName } = req.body || {};
+    if (!text || typeof text !== 'string' || !text.trim()) {
+      return res.status(400).json({ error: 'text required' });
+    }
+
+    if (!TextToSpeechClient) {
+      return res.status(500).json({ error: 'TextToSpeechClient not available' });
+    }
+
+    const client = new TextToSpeechClient();
+    const lang = (languageCode && typeof languageCode === 'string' ? languageCode : 'ru-RU');
+    const voice = {
+      languageCode: lang,
+      ...(voiceName && typeof voiceName === 'string' ? { name: voiceName } : {}),
+    };
+
+    const [response] = await client.synthesizeSpeech({
+      input: { text: text },
+      voice,
+      audioConfig: { audioEncoding: 'MP3' },
+    });
+
+    const audioContent = response?.audioContent;
+    if (!audioContent) {
+      return res.status(500).json({ error: 'No audioContent returned' });
+    }
+
+    const audioBase64 = Buffer.isBuffer(audioContent)
+      ? audioContent.toString('base64')
+      : Buffer.from(audioContent).toString('base64');
+
+    return res.json({ audioBase64, mimeType: 'audio/mpeg', languageCode: lang });
+  } catch (error) {
+    console.error('[TTS] Speak error:', error);
+    return res.status(500).json({ error: error?.message || String(error) });
+  }
 });
 
 app.post(

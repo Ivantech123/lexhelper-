@@ -90,12 +90,15 @@ const App: React.FC = () => {
       addLog("Starting initialization...");
       
       try {
+        // Force desktop fallback if not in TG or if specific URL param is set
+        const forceWeb = params.get('mode') === 'web';
         const tg = window.Telegram?.WebApp;
-        
-        if (!tg) {
-          addLog("window.Telegram.WebApp is undefined");
-          setIsTelegram(false);
-          return;
+        const isTgPlatform = tg?.platform && tg.platform !== 'unknown';
+
+        if (forceWeb || !tg || !isTgPlatform) {
+           addLog("Running in Web Mode (Desktop/Browser Fallback)");
+           setIsTelegram(false);
+           return;
         }
 
         addLog(`TG Platform: ${tg.platform}`);
