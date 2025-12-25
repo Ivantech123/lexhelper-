@@ -1,20 +1,17 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# LexHelper
 
-# Run and deploy your AI Studio app
+**Open Source Legal AI**
 
-This contains everything you need to run your app locally.
+## Автор (Author)
+**Андрей Иван (Andrey Ivan)**
 
-View your app in AI Studio: https://ai.studio/apps/drive/1VhMspVhtdLs4OPny3vW4Ks0EbosPoT0i
+## Лицензия и Условия (License)
+Это **Open Source** продукт с открытым исходным кодом.
 
-## Run Locally
+### ⚠️ ВАЖНО / IMPORTANT
+**Любое платное использование, продажа доступа, включение в платные подписки или коммерческое распространение данного продукта СТРОГО ЗАПРЕЩЕНО.**
 
-**Prerequisites:**  Node.js
+Продукт предоставляется бесплатно и с открытым кодом для образовательных и ознакомительных целей.
 
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## О проекте
+LexHelper помогает анализировать юридические ситуации, используя возможности искусственного интеллекта для оценки рисков и формирования стратегий защиты.
