@@ -1,6 +1,6 @@
 {
   "name": "lexhelper",
-  "description": "Интеллектуальный юридический помощник",
+  "description": "Open Source Legal AI. Автор: Андрей Иван. Любое платное использование запрещено.",
   "requestFramePermissions": [
     "camera",
     "microphone"

@@ -7,11 +7,11 @@
 import { GoogleGenAI, GenerateContentResponse, Tool, HarmCategory, HarmBlockThreshold, Content, Part } from "@google/genai";
 import { LegalAnalysisResult, UploadedFile } from '../types';
 
-const API_KEY = process.env.API_KEY || (typeof window !== 'undefined' ? (window as any).GEMINI_API_KEY : undefined);
+const API_KEY = process.env.API_KEY;
 let ai: GoogleGenAI;
 
 // Using the most capable model
-const MODEL_NAME = "gemini-2.0-flash-exp"; 
+const MODEL_NAME = "gemini-3-pro-preview"; 
 
 const getAiInstance = (): GoogleGenAI => {
   if (!API_KEY) {
@@ -71,15 +71,12 @@ const ANALYST_SYSTEM_INSTRUCTION = `Вы — LexHelper, интеллектуал
 }`;
 
 export const analyzeLegalCase = async (
-  userId: string | number,
   category: string,
   role: string,
   details: string,
   urls: string[],
   files: UploadedFile[] = []
 ): Promise<LegalAnalysisResult> => {
-  console.log(`[GeminiService] Starting Analysis for ${category}/${role} (User: ${userId})`);
-  
   const currentAi = getAiInstance();
   
   // Construct parts with text and optional files
@@ -110,7 +107,6 @@ export const analyzeLegalCase = async (
   const contents: Content[] = [{ role: "user", parts: contentParts }];
 
   try {
-    console.log(`[GeminiService] Sending request to model: ${MODEL_NAME}`);
     const response: GenerateContentResponse = await currentAi.models.generateContent({
       model: MODEL_NAME,
       contents: contents,
@@ -119,55 +115,27 @@ export const analyzeLegalCase = async (
         safetySettings: safetySettings,
         systemInstruction: ANALYST_SYSTEM_INSTRUCTION,
         responseMimeType: "application/json",
+        // Enable Thinking for deeper analysis (Gemini 3 Feature)
+        thinkingConfig: { thinkingBudget: 4096 }, 
       },
     });
 
     const text = response.text;
-    console.log(`[GeminiService] Response received. Length: ${text?.length || 0}`);
+    if (!text) throw new Error("No response text");
     
-    if (!text) {
-        console.error("[GeminiService] Empty response text:", response);
-        throw new Error("No response text");
-    }
-    
-    // Attempt parsing
-    try {
-        const parsed = JSON.parse(text) as LegalAnalysisResult;
-        console.log("[GeminiService] JSON parsed successfully");
-        return parsed;
-    } catch (parseError) {
-        console.error("[GeminiService] JSON Parse Error:", parseError, "Raw Text:", text);
-        throw new Error("Failed to parse AI response");
-    }
+    return JSON.parse(text) as LegalAnalysisResult;
 
-  } catch (error: any) {
-    console.error("❌ [GeminiService] Analysis Failed:", error);
-    
-    if (error.response) {
-        console.error("Error Response Data:", error.response);
-    }
-
-    // ALWAYS Return Detailed Debug Info for troubleshooting
+  } catch (error) {
+    console.error("Analysis Error:", error);
     return {
-      summary: `⚠️ ОШИБКА: ${error.message || "Неизвестная ошибка"}`,
-      reasoningTrace: [
-        "❌ Сбой анализа",
-        `Error Name: ${error.name}`,
-        `Stack: ${error.stack || 'No stack'}`,
-        error.response ? `Response: ${JSON.stringify(error.response)}` : "No response data",
-        `User ID: ${userId}`
-      ],
+      summary: "Ошибка анализа. Возможно, файл слишком большой или произошла ошибка сети.",
+      reasoningTrace: ["Не удалось завершить анализ."],
       strengths: [],
-      risks: [
-        "ТЕХНИЧЕСКИЕ ДЕТАЛИ:",
-        `Код: ${error.code || 'UNKNOWN'}`,
-        `Сообщение: ${error.toString()}`,
-        "Пожалуйста, отправьте скриншот разработчику."
-      ],
+      risks: ["Техническая ошибка"],
       legalStrengthScore: 0,
       evidenceAssessment: { present: [], missing: [] },
-      deadlines: { status: "Сбой", info: new Date().toLocaleTimeString() },
-      strategy: { negotiation: "Ошибка", court: "Ошибка" },
+      deadlines: { status: "Неизвестно", info: "" },
+      strategy: { negotiation: "", court: "" },
       recommendedDocuments: []
     };
   }
@@ -176,44 +144,6 @@ export const analyzeLegalCase = async (
 const DOC_GENERATOR_SYSTEM_INSTRUCTION = `Вы — генератор юридических документов РФ.
 Составь документ на основе данных. Используй плейсхолдеры [Данные]. Официальный стиль.
 `;
-
-export type AssistantChatMessage = { role: 'user' | 'assistant'; text: string };
-
-const ASSISTANT_SYSTEM_INSTRUCTION = `Ты — LexHelper, диалоговый ассистент.
-Твоя задача — в режиме диалога собрать недостающие факты по делу пользователя и помочь сформулировать качественное описание для дальнейшего анализа.
-
-Правила:
-1) Пиши по-русски.
-2) Коротко и по делу.
-3) Задавай максимум 1-2 уточняющих вопроса за сообщение.
-4) Если данных достаточно, предложи кратко сформулированный итог для вставки в «Детали».`;
-
-export const assistantChatReply = async (
-  category: string,
-  role: string,
-  messages: AssistantChatMessage[]
-): Promise<string> => {
-  const currentAi = getAiInstance();
-
-  const context: Content[] = [
-    { role: 'user', parts: [{ text: `КАТЕГОРИЯ: ${category}\nРОЛЬ: ${role}` }] },
-    ...messages.map((m): Content => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.text }]
-    }))
-  ];
-
-  const response: GenerateContentResponse = await currentAi.models.generateContent({
-    model: MODEL_NAME,
-    contents: context,
-    config: {
-      safetySettings: safetySettings,
-      systemInstruction: ASSISTANT_SYSTEM_INSTRUCTION,
-    }
-  });
-
-  return response.text || '';
-};
 
 export const generateLegalDocument = async (
   docName: string,

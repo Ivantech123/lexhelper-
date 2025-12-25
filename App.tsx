@@ -90,15 +90,12 @@ const App: React.FC = () => {
       addLog("Starting initialization...");
       
       try {
-        // Force desktop fallback if not in TG or if specific URL param is set
-        const forceWeb = params.get('mode') === 'web';
         const tg = window.Telegram?.WebApp;
-        const isTgPlatform = tg?.platform && tg.platform !== 'unknown';
-
-        if (forceWeb || !tg || !isTgPlatform) {
-           addLog("Running in Web Mode (Desktop/Browser Fallback)");
-           setIsTelegram(false);
-           return;
+        
+        if (!tg) {
+          addLog("window.Telegram.WebApp is undefined");
+          setIsTelegram(false);
+          return;
         }
 
         addLog(`TG Platform: ${tg.platform}`);
@@ -106,33 +103,41 @@ const App: React.FC = () => {
         tg.ready();
         addLog("Called tg.ready()");
         
-        // FIXED: If we have a valid TG platform, treat as Telegram environment
-        // regardless of initData (Telegram Desktop often has empty initData)
-        addLog(`initData length: ${tg.initData?.length || 0}, user: ${tg.initDataUnsafe?.user?.id || 'none'}`);
-        setIsTelegram(true);
-        
-        try {
-          tg.expand();
-          addLog("Called tg.expand()");
-        } catch (e) {
-          addLog(`Expand error: ${e}`);
-        }
-        
-        try {
-           tg.setHeaderColor('#09090b');
-        } catch (e) {
-           // ignore color error
-        }
-        
-        // Dynamic height fix
-        const syncHeight = () => {
-          if (tg.viewportStableHeight) {
-            setAppHeight(`${tg.viewportStableHeight}px`);
+        if (tg.initData) {
+          addLog("Valid initData found. App running in Telegram.");
+          setIsTelegram(true);
+          
+          try {
+            tg.expand();
+            addLog("Called tg.expand()");
+          } catch (e) {
+            addLog(`Expand error: ${e}`);
           }
-        };
-        
-        syncHeight();
-        tg.onEvent('viewportChanged', syncHeight);
+          
+          try {
+             tg.setHeaderColor('#09090b');
+          } catch (e) {
+             // ignore color error
+          }
+          
+          // Dynamic height fix
+          const syncHeight = () => {
+            if (tg.viewportStableHeight) {
+              setAppHeight(`${tg.viewportStableHeight}px`);
+            }
+          };
+          
+          syncHeight();
+          tg.onEvent('viewportChanged', syncHeight);
+          
+          return () => {
+             tg.offEvent('viewportChanged', syncHeight);
+             window.removeEventListener('resize', handleResize);
+          };
+        } else {
+          addLog("No initData. App running in Browser/Desktop Mode.");
+          setIsTelegram(false); 
+        }
 
       } catch (e: any) {
         addLog(`Init Exception: ${e.toString()}`);
@@ -143,20 +148,7 @@ const App: React.FC = () => {
     // Small delay to ensure script injection
     setTimeout(initTelegram, 100);
 
-    // FAILSAFE: If still loading after 3 seconds, force web mode
-    // Use callback form to check current state value
-    const failsafeTimer = setTimeout(() => {
-      setIsTelegram(prev => {
-        if (prev === null) {
-          addLog("FAILSAFE: Forcing web mode after timeout");
-          return false;
-        }
-        return prev;
-      });
-    }, 3000);
-
     return () => {
-      clearTimeout(failsafeTimer);
       window.removeEventListener('error', handleError);
       window.removeEventListener('unhandledrejection', handleRejection);
       window.removeEventListener('resize', handleResize);
